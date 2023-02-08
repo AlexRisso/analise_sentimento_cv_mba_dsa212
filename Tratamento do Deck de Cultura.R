@@ -134,4 +134,5 @@ write.csv(as_dictionary, "as_dictionary.csv", row.names=FALSE)
 dplyr::summarise(as_dictionary, observações=n())
 utils::str(as_dictionary)
 
+
 ### --->>> Tratamento do Deck De Cultura NTConsult  --->>> END
