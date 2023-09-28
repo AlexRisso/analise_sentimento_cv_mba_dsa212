@@ -5,6 +5,7 @@ date: "2023-02-08"
 output:
   word_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r Pacotes, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
@@ -27,7 +28,7 @@ if(sum(as.numeric(!pacotes %in% installed.packages())) != 0){
 # Ler o deck de cultura
 deck_cultura_df <- tibble::tibble(text = readLines("deck de cultura.txt", 
                                                    encoding = 'UTF-8'))
-dplyr::summarise(deck_cultura_df, observações=n())
+dplyr::summarise(deck_cultura_df)
 utils::str(deck_cultura_df)
 
 ```
@@ -40,7 +41,7 @@ stopwords_py <- read.csv("stopwords_pt_py.csv",
                          encoding = 'UTF-8', 
                          header = TRUE)
 # Stopwords proveniente do R
-stopwords_R <- tibble::tibble(word = stopwords('pt'))
+stopwords_R <- tibble::tibble(word = tm::stopwords('pt'))
 # Criar arquivo CSV para o stopwords do R
 write.csv(stopwords_R, "stopwords_pt_r.csv", row.names=FALSE)
 # Stopwords proveniente de alopes (github), no link:
@@ -56,13 +57,15 @@ stopwords_full_join <- dplyr::full_join(stopwords_py,
 stopwords_full_join <- dplyr::full_join(stopwords_full_join,
                                         stopwords_alopes,
                                         by = "word",
-                                        keep = FALSE)
-dplyr::summarise(stopwords_full_join, observações=n())
+                                        keep = FALSE,
+                                        multiple = "all")
+dplyr::summarise(stopwords_full_join)
 utils::str(stopwords_full_join)
 ```
 
 ```{r Tratamento, warning=FALSE}
 
+### ```{r Tratamento, echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, paged.print=TRUE}
 # Tratamento do Deck de Cultura
 deck_cultura_df$text <- deck_cultura_df$text %>%
   # Aplicar função tolower a todas as linhas no tibble
@@ -81,7 +84,7 @@ deck_cultura_df$text <- deck_cultura_df$text %>%
   # Multiplos espaços em branco são convertidos em um único espaço
   trimws()
 
-dplyr::summarise(deck_cultura_df, observações=n())
+dplyr::summarise(deck_cultura_df)
 utils::str(deck_cultura_df)
 #dplyr::glimpse(deck_cultura_df)
 #utils::head(deck_cultura_df, n=15) 
@@ -98,14 +101,14 @@ corpus_deck <- deck_cultura_df %>%
                tidytext::unnest_tokens(word,
                                        text,
                                        token = "words")
-dplyr::summarise(corpus_deck, observações=n())
+dplyr::summarise(corpus_deck)
 utils::str(corpus_deck)
 
 # Contar aparições de palavras usando uma função dplyr
 word_count <- corpus_deck %>% 
               dplyr::count(word,
                            sort = TRUE)
-dplyr::summarise(word_count, observações=n())
+dplyr::summarise(word_count)
 utils::str(word_count)
 ```
 
@@ -148,7 +151,7 @@ kgrams$word <- kgrams$word %>% trimws()
 # Remove "NA" e registros vazios
 kgrams <- kgrams[!apply(is.na(kgrams) | kgrams$word == "", 1, all),]
 
-dplyr::summarise(kgrams, observações=n())
+dplyr::summarise(kgrams)
 utils::str(kgrams)
 
 # Número de ngram no dicionário de sentimentos
@@ -181,6 +184,6 @@ as_dictionary$value[1:max_words] <- as_value_main_words
 # Criar arquivo CSV para o dicionário
 write.csv(as_dictionary, "as_dictionary", row.names=FALSE)
 
-dplyr::summarise(as_dictionary, observações=n())
+dplyr::summarise(as_dictionary)
 utils::str(as_dictionary)
 ```

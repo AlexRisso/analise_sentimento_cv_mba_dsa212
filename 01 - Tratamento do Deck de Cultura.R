@@ -1,6 +1,7 @@
 # Instalação e Carregamento dos Pacotes
 
-pacotes <- c("tm", "dplyr", "wordcloud", "stringr", "tidyverse", "tidytext", "tibble", "utils")
+pacotes <- c("tm", "dplyr", "wordcloud", "stringr", "tidyverse", "tidytext", 
+             "tibble", "utils", "widyr", "janeaustenr")
 
 if(sum(as.numeric(!pacotes %in% installed.packages())) != 0){
   instalador <- pacotes[!pacotes %in% installed.packages()]
@@ -12,11 +13,7 @@ if(sum(as.numeric(!pacotes %in% installed.packages())) != 0){
   sapply(pacotes, require, character = T) 
 }
 
-### --->>> Tratamento do Deck De Cultura NTConsult  --->>> START
-
-# Ler o deck de cultura
-deck_cultura_df <- tibble::tibble(text = readLines("deck de cultura.txt", 
-                                                   encoding = 'UTF-8'))
+### --->>> Tratamento do Deck De Cultura NTConsult --->>> START
 
 # Gerar lista de stopwords
 # Stopwords proveniente do Python
@@ -40,7 +37,12 @@ stopwords_full_join <- dplyr::full_join(stopwords_py,
 stopwords_full_join <- dplyr::full_join(stopwords_full_join,
                                         stopwords_alopes,
                                         by = "word",
-                                        keep = FALSE)
+                                        keep = FALSE,
+                                        multiple = "all")
+
+# Ler o deck de cultura
+deck_cultura_df <- tibble::tibble(text = readLines("deck de cultura.txt", 
+                                                   encoding = 'UTF-8'))
 
 # Tratamento do Deck de Cultura
 deck_cultura_df$text <- deck_cultura_df$text %>%
@@ -134,5 +136,55 @@ write.csv(as_dictionary, "as_dictionary.csv", row.names=FALSE)
 dplyr::summarise(as_dictionary, observações=n())
 utils::str(as_dictionary)
 
+### --->>> Tratamento do Deck De Cultura NTConsult --->>> END
 
-### --->>> Tratamento do Deck De Cultura NTConsult  --->>> END
+
+### --->>> Análise de correlação phi no Deck --->>> START
+
+# Bibliotecas
+library("dplyr")
+library("tidytext")
+library("wordcloud")
+library("stringr")
+library("SnowballC")
+#install.packages("stopwords")
+
+# Mudar o encoding para ver acentos
+deck_cultura_df_kgrams <- deck_cultura_df
+Encoding(deck_cultura_df_kgrams$text) <- "ASCII"
+
+# Retirar os acentos
+for (i in 1:nrow(deck_cultura_df_kgrams))
+{
+  deck_cultura_df_kgrams$text[i] <- iconv(deck_cultura_df_kgrams$text[i], to = "ASCII//TRANSLIT")
+}
+
+# Unnest tokens
+deck_cultura_df_kgrams <- deck_cultura_df_kgrams %>%  
+  mutate(line = row_number()) %>%
+  unnest_tokens(word, text) %>%
+  filter(!word %in% stopwords_full_join$word)
+
+# Correlação entre palavras - widyr
+word_pairs <- deck_cultura_df_kgrams %>%
+  pairwise_count(word, line, sort = TRUE)
+
+word_cors <- deck_cultura_df_kgrams %>%
+  group_by(word) %>%
+  filter(n() >= 5) %>%
+  pairwise_cor(word, line, sort = TRUE)
+
+# Gráfico
+word_cors %>%
+  filter(item1 %in% c("impacto", "positivo", "alta", "performance")) %>%
+  group_by(item1) %>%
+  top_n(8) %>%
+  ungroup() %>%
+  mutate(item2 = reorder(item2, correlation)) %>%
+  ggplot(aes(item2, correlation)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Termo do bigrama", y = "Correlação") +
+  facet_wrap(~ item1, scales = "free") +
+  coord_flip() 
+
+### --->>> Análise de correlação phi no Deck --->>> END
