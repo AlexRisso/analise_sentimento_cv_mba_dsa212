@@ -1,0 +1,801 @@
+> # Gera o data frame
+> candidatos_linkedin <- read_excel("candidatos texto linkedin.xlsx")
+> # Corrigir encoding do texto da coluna "sobre"
+> candidatos_linkedin$sobre <- iconv(candidatos_linkedin$sobre, to = "ASCII//TRANSLIT")
+> # Remover emojis
+> candidatos_linkedin$sobre <- iconv(candidatos_linkedin$sobre, sub="", 'UTF-8', 'ASCII')
+> # Remover caracter especial
+> candidatos_linkedin$sobre <- candidatos_linkedin$sobre %>%
++ lapply(gsub, pattern = '[^[:alnum:]]', replace = ' ') 
+> # Visualizar dataframe
+> dplyr::glimpse(candidatos_linkedin)
+Rows: 246
+Columns: 3
+$ id_candidato <dbl> 4317500, 3800253, 4478472, 4319910, 3366230, 4126077, 4325084, 3911252, 4234311, 3703293, 3908024, 3820238, 2834996,…
+$ condicao     <chr> "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "con…
+$ sobre        <list> "Atuo como QA Trainee  adquirindo mais e mais conhecimento tecnico dia apos dia  sempre encarando novos desafios na…
+> 
+> # Carregar datasets
+> data("oplexicon_v3.0")
+> data("sentiLex_lem_PT02")
+> 
+> oplexicon30 <- oplexicon_v3.0
+> dplyr::glimpse(oplexicon30)
+Rows: 32,191
+Columns: 4
+$ term              <chr> "=[", "=@", "=p", "=P", "=x", "=d", "=D", ";)", ";)", ";@", ";*", ";**", ";~", ";D", ";D", ";p", ";P", ";p", ";…
+$ type              <chr> "emot", "emot", "emot", "emot", "emot", "emot", "emot", "emot", "emot", "emot", "emot", "emot", "emot", "emot",…
+$ polarity          <int> -1, -1, -1, -1, -1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 1, -1, 0, 0, …
+$ polarity_revision <chr> "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "…
+> sentiLexPT02 <- sentiLex_lem_PT02
+> dplyr::glimpse(sentiLexPT02)
+Rows: 7,014
+Columns: 5
+$ term                    <chr> "a-vontade", "abafado", "abafante", "abaixado", "abalado", "abalizado", "abalroado", "abalroar", "abanar"…
+$ grammar_category        <chr> "N", "Adj", "Adj", "Adj", "Adj", "Adj", "Adj", "V", "V", "Adj", "N", "Adj", "V", "Adj", "Adj", "Adj", "Ad…
+$ polarity                <dbl> 1, -1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, -1, 0, -1, 1, 0, 1, -1, -1, 1, -1, -1, -1, 1, -1, -1, -1, -1,…
+$ polarity_target         <chr> "N0", "N0", "N0", "N0", "N0", "N0", "N0", "N0:N1", "N0:N1", "N0", "N0", "N0", "N0:N1", "N0", "N0", "N0", …
+$ polarity_classification <chr> "MAN", "JALC", "MAN", "JALC", "JALC", "JALC", "MAN", "MAN", "MAN", "MAN", "MAN", "JALC", "MAN", "MAN", "J…
+> 
+> # Criar uma linha para cada palavra de um dos campo "sobre"
+> candidatos_linkedin_unnested <- candidatos_linkedin %>%
++   tidytext::unnest_tokens(term, sobre)
+> dplyr::glimpse(candidatos_linkedin_unnested)
+Rows: 21,528
+Columns: 3
+$ id_candidato <dbl> 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500,…
+$ condicao     <chr> "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "con…
+$ term         <chr> "atuo", "como", "qa", "trainee", "adquirindo", "mais", "e", "mais", "conhecimento", "tecnico", "dia", "apos", "dia",…
+> 
+> # Quantificar o sentimento do campo "sobre"
+> candidatos_linkedin_unnested_op30_senPT02 <- candidatos_linkedin_unnested %>% 
++   inner_join(oplexicon30, by = join_by(term)) %>% 
++   inner_join(sentiLexPT02 %>% 
++               select(term, lex_polarity = polarity), by = join_by(term)) %>% 
++   select(id_candidato, term, polarity, lex_polarity) %>%
++ group_by(id_candidato) %>% 
++   summarise(
++     sobre_sent_op30 = sum(polarity),
++     sobre_sent_lexPT02 = sum(lex_polarity),
++     sum_words = n()
++   ) %>% 
++   ungroup() %>% 
++   rowwise() %>% 
++   mutate(
++     most_neg = min(sobre_sent_lexPT02, sobre_sent_op30),
++     most_pos = max(sobre_sent_lexPT02, sobre_sent_op30)
++   )
+Warning messages:
+1: In inner_join(., oplexicon30, by = join_by(term)) :
+  Each row in `x` is expected to match at most 1 row in `y`.
+ℹ Row 4186 of `x` matches multiple rows.
+ℹ If multiple matches are expected, set `multiple = "all"` to silence this warning.
+2: In inner_join(., sentiLexPT02 %>% select(term, lex_polarity = polarity),  :
+  Each row in `x` is expected to match at most 1 row in `y`.
+ℹ Row 991 of `x` matches multiple rows.
+ℹ If multiple matches are expected, set `multiple = "all"` to silence this warning.
+> dplyr::glimpse(candidatos_linkedin_unnested_op30_senPT02)
+Rows: 107
+Columns: 6
+Rowwise: 
+$ id_candidato       <dbl> 2759647, 2777665, 2837662, 2902261, 3205627, 3254633, 3275989, 3371441, 3379261, 3496908, 3535752, 3605757, 36…
+$ sobre_sent_op30    <int> 0, 0, 2, 1, 0, 0, 2, 0, 1, 0, 1, -1, 2, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 2, 0, 1, 1, 1, 3, 1, 1, -1, 1, 0, …
+$ sobre_sent_lexPT02 <dbl> -1, 0, 1, 0, 0, -1, 2, 2, 1, 1, 2, 1, 2, 2, 1, -1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 2, 0, 1, 2, 1, 1, 2, 3, 3, 1, -1…
+$ sum_words          <int> 1, 2, 2, 1, 2, 1, 5, 3, 1, 1, 3, 3, 2, 4, 1, 2, 1, 1, 1, 1, 2, 1, 1, 3, 1, 2, 1, 1, 2, 2, 5, 2, 3, 6, 1, 2, 2,…
+$ most_neg           <dbl> -1, 0, 1, 0, 0, -1, 2, 0, 1, 0, 1, -1, 2, 1, 1, -1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 2, 0, 1, 1, 1, 1, 1, 1, -1, 1, …
+$ most_pos           <dbl> 0, 0, 2, 1, 0, 0, 2, 2, 1, 1, 2, 1, 2, 2, 1, 0, 1, 1, 1, 1, 1, 1, 1, 3, 1, 2, 0, 1, 2, 1, 3, 2, 3, 3, 1, 0, 1,…
+> # Plotar o gráfico
+> linkedin_sent_graph <- candidatos_linkedin_unnested_op30_senPT02 %>% 
++   ggplot(aes(x = sobre_sent_op30, y = sobre_sent_lexPT02)) +
++   geom_point(aes(color = sum_words)) + 
++   scale_color_continuous(low = "green", high = "red") +
++   labs(x = "Polaridade no OpLexicon", y = "Polaridade no SentiLex") +
++   #geom_smooth(method = "lm") +
++   geom_vline(xintercept = 0, linetype = "dashed") +
++   geom_hline(yintercept = 0, linetype = "dashed")
+> plot(linkedin_sent_graph)
+> 
+> # Tão somente somar a polaridade de cada palavra não é um bom método.
+> # Existem anomalias nos dados, pois as mesmas palavras possuem sentimentos 
+> # diferentes de acordo com o léxicon usado.
+> # O conteúdo mais positivo dos textos dos candidatos
+> most_pos <- which.max(candidatos_linkedin_unnested_op30_senPT02$most_pos)
+> most_neg <- which.min(candidatos_linkedin_unnested_op30_senPT02$most_neg)
+> # Conteúdo mais positivo
+> most_pos_sobre <- 
++   dplyr::filter(candidatos_linkedin,
++                 id_candidato == candidatos_linkedin_unnested_op30_senPT02$id_candidato[most_pos])
+> cat(unlist(most_pos_sobre$sobre[1]))
+Profissional dedicado e atencioso  estou a disposicao para novos aprendizados  Tenho bom relacionamento interpessoal  dinamico  flexibilidade e estou preparado para o desafio de novas funcoes e atividades  Procuro estar sempre atualizado para meu aprimoramento pessoal e profissional  Gosto de atuar com pessoas e solucoes de problema ou melhorias em processos> cat(most_pos_sobre$id_candidato[1])
+4094821> # Conteúdo mais negativo
+> most_neg_sobre <- 
++   dplyr::filter(candidatos_linkedin,
++                 id_candidato == candidatos_linkedin_unnested_op30_senPT02$id_candidato[most_neg])
+> cat(unlist(most_neg_sobre$sobre[1]))
+I m currently a Master s student in Data Science and Artificial Intelligence  Full Stack Java Developer at Pathfind   Route optimization  I have 5  years of experience in Full Stack development with Java and Javascript technologies   Skills  Data Science  Machine Learning  Software Architecture  JavaEE Technologies and Web Development> cat(most_neg_sobre$id_candidato[1])
+2759647> 
+> # Resumo do deck - número de termos após o processamento do stopwords
+> dplyr::summarise(corpus_deck, 
++                  word=n(),
++                  sort = TRUE)
+# A tibble: 1 × 2
+   word sort 
+  <int> <lgl>
+1  1295 TRUE 
+> # Agrupando os termos
+> corpus_deck_sent_sum <- corpus_deck %>% 
++   dplyr::count(word)
+> dplyr::glimpse(corpus_deck_sent_sum)
+Rows: 769
+Columns: 2
+$ word <chr> "abandonar", "aberto", "abertos", "abordagem", "abrasão", "acesso", "acima", "acreditamos", "acrônimos", "adaptação", "adapt…
+$ n    <int> 1, 1, 1, 2, 1, 1, 2, 4, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 1, 1, 1, 1, 4, 1, 2, 1, 1, 1, 1, 8, 1, 1, 3, 1, 1, 1…
+> # Quantidade de termos após agrupamento
+> dplyr::summarise(corpus_deck_sent_sum, word=n())
+# A tibble: 1 × 1
+   word
+  <int>
+1   769
+> 
+> # Analise de sentimento do deck usando o "oplexicon_v3.0"
+> corpus_deck_sent_op30 <- dplyr::rename(corpus_deck,
++                                        term = word) %>% 
++   mutate(origem = "deck") %>% 
++   select(origem, term)
+> 
+> corpus_deck_sent_op30 <- corpus_deck_sent_op30 %>% 
++   inner_join(oplexicon30, by = join_by(term)) %>% 
++   summarise(
++     sobre_sent_op30 = sum(polarity),
++     sum_words = n()
++   )
+Warning message:
+In inner_join(., oplexicon30, by = join_by(term)) :
+  Each row in `x` is expected to match at most 1 row in `y`.
+ℹ Row 367 of `x` matches multiple rows.
+ℹ If multiple matches are expected, set `multiple = "all"` to silence this warning.
+> dplyr::glimpse(corpus_deck_sent_op30)
+Rows: 1
+Columns: 2
+$ sobre_sent_op30 <int> 52
+$ sum_words       <int> 312
+> 
+> # Analise de sentimento do deck usando o "sentiLex_lem_PT02"
+> corpus_deck_sent_lexpt02 <- dplyr::rename(corpus_deck,
++                                           term = word) %>% 
++   mutate(origem = "deck") %>% 
++   select(origem, term)
+> 
+> corpus_deck_sent_lexpt02 <- corpus_deck_sent_lexpt02 %>% 
++   inner_join(sentiLexPT02, by = join_by(term)) %>% 
++   summarise(
++     sobre_sent_lexpt02 = sum(polarity),
++     sum_words = n()
++   )
+> dplyr::glimpse(corpus_deck_sent_lexpt02)
+Rows: 1
+Columns: 2
+$ sobre_sent_lexpt02 <dbl> 45
+$ sum_words          <int> 86
+> 
+> # Termos que são compartilhados simultaneamente por “oplexicon_v3.0”, “sentiLex_lem_PT02” e no “deck”
+> corpus_deck_sent_full <- dplyr::rename(corpus_deck,
++                                        term = word) %>%
++   mutate(origem = "deck") %>%
++   select(origem, term)
+> dplyr::glimpse(corpus_deck_sent_full)
+Rows: 1,295
+Columns: 2
+$ origem <chr> "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "d…
+$ term   <chr> "cultura", "documento", "expressa", "parte", "parte", "aspiramos", "neste", "documento", "apresentamos", "propósito", "mis…
+> corpus_deck_sent_full <- corpus_deck_sent_full %>% 
++   inner_join(oplexicon30, by = join_by(term)) %>% 
++   inner_join(sentiLexPT02 %>% select(term, lex_polarity = polarity), by = join_by(term)) %>% 
++   group_by(origem) %>% 
++   summarise(
++     sobre_sent_op30 = sum(polarity),
++     sobre_sent_lexPT02 = sum(lex_polarity),
++     sum_words = n()
++     )
+Warning message:
+In inner_join(., oplexicon30, by = join_by(term)) :
+  Each row in `x` is expected to match at most 1 row in `y`.
+ℹ Row 367 of `x` matches multiple rows.
+ℹ If multiple matches are expected, set `multiple = "all"` to silence this warning.
+> dplyr::glimpse(corpus_deck_sent_full)
+Rows: 1
+Columns: 4
+$ origem             <chr> "deck"
+$ sobre_sent_op30    <int> 25
+$ sobre_sent_lexPT02 <dbl> 27
+$ sum_words          <int> 58
+> 
+> # Histograma de polaridade compardo para os candidatos contratados e recusados
+> #Adicionando a coluna de condição ao candidatos_linkedin_unnested_op30_senPT02
+> candidatos_linkedin_unnested_op30_senPT02 <- candidatos_linkedin_unnested_op30_senPT02 %>% 
++   inner_join(candidatos_linkedin, by = join_by(id_candidato))
+> candidatos_linkedin_unnested_op30_senPT02$sobre <- NULL
+> dplyr::glimpse(candidatos_linkedin_unnested_op30_senPT02)
+Rows: 107
+Columns: 7
+Rowwise: 
+$ id_candidato       <dbl> 2759647, 2777665, 2837662, 2902261, 3205627, 3254633, 3275989, 3371441, 3379261, 3496908, 3535752, 3605757, 36…
+$ sobre_sent_op30    <int> 0, 0, 2, 1, 0, 0, 2, 0, 1, 0, 1, -1, 2, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 2, 0, 1, 1, 1, 3, 1, 1, -1, 1, 0, …
+$ sobre_sent_lexPT02 <dbl> -1, 0, 1, 0, 0, -1, 2, 2, 1, 1, 2, 1, 2, 2, 1, -1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 2, 0, 1, 2, 1, 1, 2, 3, 3, 1, -1…
+$ sum_words          <int> 1, 2, 2, 1, 2, 1, 5, 3, 1, 1, 3, 3, 2, 4, 1, 2, 1, 1, 1, 1, 2, 1, 1, 3, 1, 2, 1, 1, 2, 2, 5, 2, 3, 6, 1, 2, 2,…
+$ most_neg           <dbl> -1, 0, 1, 0, 0, -1, 2, 0, 1, 0, 1, -1, 2, 1, 1, -1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 2, 0, 1, 1, 1, 1, 1, 1, -1, 1, …
+$ most_pos           <dbl> 0, 0, 2, 1, 0, 0, 2, 2, 1, 1, 2, 1, 2, 2, 1, 0, 1, 1, 1, 1, 1, 1, 1, 3, 1, 2, 0, 1, 2, 1, 3, 2, 3, 3, 1, 0, 1,…
+$ condicao           <chr> "contratado", "recusado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", …
+> # Definindo dados do gráfico
+> #Título Geral
+> title_graph = "Frequencia de polaridades entre candidatos contratados e recusados"
+> # Plotar os gráficos
+> # oplexicon_v3.0
+> candidatos_linkedin_unnested_op30_senPT02_graph <- candidatos_linkedin_unnested_op30_senPT02 %>% 
++   ggplot(aes(sobre_sent_op30, fill = id_candidato)) +
++   geom_histogram(show.legend = FALSE) +
++   labs(x = "polaridade", 
++        y = "frequência", 
++        title = title_graph, 
++        subtitle = "oplexicon_v3.0") +
++   facet_wrap(~condicao, ncol = 2)
+> plot(candidatos_linkedin_unnested_op30_senPT02_graph)
+`stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+Warning messages:
+1: The following aesthetics were dropped during statistical transformation: fill
+ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
+ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a factor? 
+2: The following aesthetics were dropped during statistical transformation: fill
+ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
+ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a factor? 
+> 
+> # sentiLex_lem_PT02
+> candidatos_linkedin_unnested_op30_senPT02_graph <- candidatos_linkedin_unnested_op30_senPT02 %>% 
++   ggplot(aes(sobre_sent_lexPT02, fill = id_candidato)) +
++   geom_histogram(show.legend = FALSE) +
++   labs(x = "polaridade", 
++        y = "frequência", 
++        title = title_graph, 
++        subtitle = "sentiLex_lem_PT02") +
++   facet_wrap(~condicao, ncol = 2)
+> plot(candidatos_linkedin_unnested_op30_senPT02_graph)
+`stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+Warning messages:
+1: The following aesthetics were dropped during statistical transformation: fill
+ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
+ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a factor? 
+2: The following aesthetics were dropped during statistical transformation: fill
+ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
+ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a factor? 
+> 
+> # Excluindo do gráfico análises com baixo número de palavras analisadas
+> min_terms_analyzed = 3
+> # oplexicon_v3.0 sum_words >= 3
+> candidatos_linkedin_unnested_op30_senPT02_graph <- candidatos_linkedin_unnested_op30_senPT02 %>% 
++   filter(sum_words >= min_terms_analyzed)  %>%
++   ggplot(aes(sobre_sent_op30, fill = id_candidato)) +
++   geom_histogram(show.legend = FALSE) +
++   labs(x = "polaridade", 
++        y = "frequência", 
++        title = title_graph, 
++        subtitle = paste("oplexicon_v3.0: termos com frequência >=", min_terms_analyzed, "em cada candidato")) +
++   facet_wrap(~condicao, ncol = 2)
+> plot(candidatos_linkedin_unnested_op30_senPT02_graph)
+`stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+Warning messages:
+1: The following aesthetics were dropped during statistical transformation: fill
+ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
+ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a factor? 
+2: The following aesthetics were dropped during statistical transformation: fill
+ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
+ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a factor? 
+> 
+> # sentiLex_lem_PT02 sum_words >= 3
+> candidatos_linkedin_unnested_op30_senPT02_graph <- candidatos_linkedin_unnested_op30_senPT02 %>% 
++   filter(sum_words >= min_terms_analyzed)  %>%
++   ggplot(aes(sobre_sent_lexPT02, fill = id_candidato)) +
++   geom_histogram(show.legend = FALSE) +
++   labs(x = "polaridade", 
++        y = "frequência", 
++        title = "Frequencia de polaridades entre candidatos contratados e recusados", 
++        subtitle = paste("sentiLex_lem_PT02: termos com frequência >=", min_terms_analyzed, "em cada candidato")) +
++   facet_wrap(~condicao, ncol = 2)
+> plot(candidatos_linkedin_unnested_op30_senPT02_graph)
+`stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+Warning messages:
+1: The following aesthetics were dropped during statistical transformation: fill
+ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
+ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a factor? 
+2: The following aesthetics were dropped during statistical transformation: fill
+ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
+ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a factor? 
+> 
+> # Gráfico de rede de palavras
+> # Prepara os dados
+> word_pairs_graph <- word_pairs %>%
++   filter(n >= 4) # %>%
+> # Trava a apresentação da nuvem
+> set.seed(137)
+> # Plotar o gráfico
+> ggraph(word_pairs_graph, layout = "fr") +
++   geom_edge_link(aes(edge_alpha = n, 
++                      edge_width = n), 
++                  edge_colour = "gray50") +
++   geom_node_point() +
++   geom_node_text(aes(label = name), 
++                  repel = TRUE,
++                  point.padding = unit(0.25, "lines"), 
++                  vjust = 1, 
++                  hjust = 1) + 
++   ggtitle('Rede de Palavras do "Deck" de Cultura da NT') + 
++   theme_void()
+> 
+> ### --->>> Análise usando o lexicon NRC traduzido para o PTBR --->>> START
+> 
+> # Extraindo lexicon de análise de sentimentos
+> #lexiconPT::get_word_sentiment("temer")
+> loughran_lex <- get_sentiments("loughran")
+> bing_lex <- get_sentiments("bing")
+> afinn_lex <- get_sentiments("afinn")
+> nrc_lex <- get_sentiments("nrc")
+> #write.table(loughran_lex, file = "loughran_lex.csv", sep = ";", na = "", quote = TRUE, row.names = FALSE, eol = "\r\n")
+> # Gerar arquivo CSV para usar na tradução do ncr
+> write.table(nrc_lex, file = "nrc_lex.csv", sep = ";", na = "", quote = TRUE, row.names = FALSE, eol = "\r\n")
+> 
+> # Lendo a base do ncr traduzida
+> nrc_lex_PTBR_df <- read_excel("nrc_lex_PTBR_df.xlsx",
++                               sheet = "nrc_lex_PTBR_df",
++                               col_types = c("text", "text", "text", "text", "text", "numeric"))
+> dplyr::glimpse(nrc_lex_PTBR_df)
+Rows: 13,872
+Columns: 6
+$ word_eng             <chr> "abacus", "abandon", "abandon", "abandon", "abandoned", "abandoned", "abandoned", "abandoned", "abandonment"…
+$ sentiment_eng        <chr> "trust", "sadness", "negative", "fear", "negative", "sadness", "anger", "fear", "sadness", "surprise", "nega…
+$ word_ptbr            <chr> "ábaco", "abandonar", "abandonar", "abandonar", "abandonado", "abandonado", "abandonado", "abandonado", "aba…
+$ sentiment_ptbr       <chr> "confiança", "tristeza", "negativo", "medo", "negativo", "tristeza", "raiva", "medo", "tristeza", "surpresa"…
+$ context              <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, …
+$ not_to_used_for_ptbr <dbl> 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, …
+> # Definição das colunas
+> # word_eng             => termo original do inglês
+> # sentiment_eng        => sentimento original do inglês
+> # word_ptbr            => termo traduzido para o português
+> # sentiment_ptbr       => sentimento traduzido para o português
+> # context              => explicação do contexto da aplicação do termo em português, e/ou outras possíveis traduções
+> # not_to_used_for_ptbr => "0" para termos que devem ser revisados para serem usados; "1" para termos que não serão usados.
+> 
+> # Filtrar os termos que serão comparados (not_to_used_for_ptbr == 0)
+> nrc_lex_PTBR_df <- nrc_lex_PTBR_df %>%
++   filter(not_to_used_for_ptbr == 0)
+> nrc_lex_PTBR_df <- nrc_lex_PTBR_df %>% 
++   dplyr::select(word_ptbr,
++                 sentiment_ptbr)
+> dplyr::glimpse(nrc_lex_PTBR_df) 
+Rows: 13,666
+Columns: 2
+$ word_ptbr      <chr> "ábaco", "abandonar", "abandonar", "abandonar", "abandonado", "abandonado", "abandonado", "abandonado", "abandono"…
+$ sentiment_ptbr <chr> "confiança", "tristeza", "negativo", "medo", "negativo", "tristeza", "raiva", "medo", "tristeza", "surpresa", "neg…
+> 
+> # Separa os tokens
+> candidatos_linkedin_unnested_nrc <- candidatos_linkedin %>%
++   tidytext::unnest_tokens(output = term, 
++                           input = sobre, 
++                           token = "words",
++                           to_lower = TRUE)
+> dplyr::glimpse(candidatos_linkedin_unnested_nrc)
+Rows: 21,528
+Columns: 3
+$ id_candidato <dbl> 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500, 4317500,…
+$ condicao     <chr> "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "con…
+$ term         <chr> "atuo", "como", "qa", "trainee", "adquirindo", "mais", "e", "mais", "conhecimento", "tecnico", "dia", "apos", "dia",…
+> 
+> # Gera o resumo de candidato por sentimento
+> candidatos_linkedin_unnested_sent <- candidatos_linkedin_unnested_nrc %>%
++   inner_join(nrc_lex_PTBR_df, join_by(term == word_ptbr)) %>%
++   count(id_candidato,
++         condicao,
++         sentiment_ptbr)
+Warning message:
+In inner_join(., nrc_lex_PTBR_df, join_by(term == word_ptbr)) :
+  Each row in `x` is expected to match at most 1 row in `y`.
+ℹ Row 9 of `x` matches multiple rows.
+ℹ If multiple matches are expected, set `multiple = "all"` to silence this warning.
+> dplyr::glimpse(candidatos_linkedin_unnested_sent)
+Rows: 732
+Columns: 4
+$ id_candidato   <dbl> 2756607, 2756607, 2756607, 2756607, 2756607, 2777665, 2777665, 2777665, 2777665, 2777665, 2837662, 2837662, 283766…
+$ condicao       <chr> "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recus…
+$ sentiment_ptbr <chr> "antecipação", "confiança", "negativo", "positivo", "tristeza", "antecipação", "confiança", "negativo", "positivo"…
+$ n              <int> 1, 5, 1, 5, 1, 3, 4, 2, 6, 1, 1, 7, 2, 3, 11, 1, 2, 1, 2, 4, 2, 3, 1, 9, 2, 1, 1, 1, 2, 1, 7, 13, 7, 4, 4, 2, 2, 2…
+> 
+> # Gera o total de palavras avaliadas com ncr_ptbr
+> candidatos_linkedin_unnested_sent_count_words <- candidatos_linkedin_unnested_nrc %>%
++   inner_join(nrc_lex_PTBR_df, join_by(term == word_ptbr)) %>%
++   count(id_candidato,
++         condicao) %>% 
++   dplyr::rename(words_total = n)
+Warning message:
+In inner_join(., nrc_lex_PTBR_df, join_by(term == word_ptbr)) :
+  Each row in `x` is expected to match at most 1 row in `y`.
+ℹ Row 9 of `x` matches multiple rows.
+ℹ If multiple matches are expected, set `multiple = "all"` to silence this warning.
+> dplyr::glimpse(candidatos_linkedin_unnested_sent_count_words)
+Rows: 159
+Columns: 3
+$ id_candidato <dbl> 2756607, 2777665, 2837662, 2902261, 3072366, 3205627, 3254633, 3263953, 3275989, 3366230, 3371441, 3379261, 3496908,…
+$ condicao     <chr> "recusado", "recusado", "contratado", "contratado", "recusado", "contratado", "contratado", "contratado", "contratad…
+$ words_total  <int> 13, 16, 27, 26, 43, 8, 3, 4, 23, 43, 14, 6, 6, 2, 12, 36, 10, 3, 13, 1, 1, 23, 7, 6, 4, 7, 4, 9, 2, 10, 4, 7, 43, 1,…
+> 
+> # Adiciona coluna com o número total de palavras "words_total"
+> candidatos_linkedin_unnested_sent <- candidatos_linkedin_unnested_sent %>%
++   left_join(candidatos_linkedin_unnested_sent_count_words)
+Joining with `by = join_by(id_candidato, condicao)`
+> dplyr::glimpse(candidatos_linkedin_unnested_sent)
+Rows: 732
+Columns: 5
+$ id_candidato   <dbl> 2756607, 2756607, 2756607, 2756607, 2756607, 2777665, 2777665, 2777665, 2777665, 2777665, 2837662, 2837662, 283766…
+$ condicao       <chr> "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recus…
+$ sentiment_ptbr <chr> "antecipação", "confiança", "negativo", "positivo", "tristeza", "antecipação", "confiança", "negativo", "positivo"…
+$ n              <int> 1, 5, 1, 5, 1, 3, 4, 2, 6, 1, 1, 7, 2, 3, 11, 1, 2, 1, 2, 4, 2, 3, 1, 9, 2, 1, 1, 1, 2, 1, 7, 13, 7, 4, 4, 2, 2, 2…
+$ words_total    <int> 13, 13, 13, 13, 13, 16, 16, 16, 16, 16, 27, 27, 27, 27, 27, 27, 27, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 43, 43…
+> 
+> # Calcula o fator
+> candidatos_linkedin_unnested_sent <- candidatos_linkedin_unnested_sent %>%
++   mutate(fator = n/words_total)
+> dplyr::glimpse(candidatos_linkedin_unnested_sent)
+Rows: 732
+Columns: 6
+$ id_candidato   <dbl> 2756607, 2756607, 2756607, 2756607, 2756607, 2777665, 2777665, 2777665, 2777665, 2777665, 2837662, 2837662, 283766…
+$ condicao       <chr> "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recusado", "recus…
+$ sentiment_ptbr <chr> "antecipação", "confiança", "negativo", "positivo", "tristeza", "antecipação", "confiança", "negativo", "positivo"…
+$ n              <int> 1, 5, 1, 5, 1, 3, 4, 2, 6, 1, 1, 7, 2, 3, 11, 1, 2, 1, 2, 4, 2, 3, 1, 9, 2, 1, 1, 1, 2, 1, 7, 13, 7, 4, 4, 2, 2, 2…
+$ words_total    <int> 13, 13, 13, 13, 13, 16, 16, 16, 16, 16, 27, 27, 27, 27, 27, 27, 27, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 43, 43…
+$ fator          <dbl> 0.07692308, 0.38461538, 0.07692308, 0.38461538, 0.07692308, 0.18750000, 0.25000000, 0.12500000, 0.37500000, 0.0625…
+> 
+> # Gerar arquivo CSV para ser transposta no excel
+> write.table(candidatos_linkedin_unnested_sent, 
++             file = "candidatos_linkedin_unnested_sent.csv", 
++             quote = TRUE, 
++             sep = ";", 
++             eol = "\r\n",
++             na = "", 
++             row.names = FALSE,
++             fileEncoding = "UTF-8")
+> 
+> # Lendo a base do candidatos_linkedin_unnested_sent transposto
+> candidatos_linkedin_unnested_sent_transpose <- read_excel("candidatos_linkedin_unnested_sent.xlsx",
++                               sheet = "transpose",
++                               col_types = c("text", "text", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric"))
+> dplyr::glimpse(candidatos_linkedin_unnested_sent_transpose)
+Rows: 158
+Columns: 12
+$ id_candidato <chr> "2756607", "2777665", "2837662", "2902261", "3205627", "3254633", "3263953", "3275989", "3366230", "3367726", "33714…
+$ condicao     <chr> "recusado", "recusado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contrat…
+$ antecipação  <dbl> 0.07692308, 0.18750000, 0.05263158, 0.09677419, 0.25000000, 0.00000000, 0.20000000, 0.07142857, 0.09523810, 0.000000…
+$ confiança    <dbl> 0.38461538, 0.25000000, 0.23684211, 0.16129032, 0.37500000, 0.25000000, 0.20000000, 0.25000000, 0.09523810, 0.400000…
+$ negativo     <dbl> 0.07692308, 0.12500000, 0.10526316, 0.09677419, 0.00000000, 0.50000000, 0.00000000, 0.10714286, 0.19047619, 0.000000…
+$ positivo     <dbl> 0.3846154, 0.3750000, 0.3421053, 0.3548387, 0.3750000, 0.0000000, 0.3000000, 0.3214286, 0.2857143, 0.6000000, 0.4736…
+$ tristeza     <dbl> 0.07692308, 0.06250000, 0.05263158, 0.03225806, 0.00000000, 0.00000000, 0.00000000, 0.10714286, 0.09523810, 0.000000…
+$ alegria      <dbl> 0.00000000, 0.00000000, 0.07894737, 0.06451613, 0.00000000, 0.00000000, 0.10000000, 0.03571429, 0.14285714, 0.000000…
+$ medo         <dbl> 0.00000000, 0.00000000, 0.05263158, 0.06451613, 0.00000000, 0.25000000, 0.10000000, 0.10714286, 0.00000000, 0.000000…
+$ raiva        <dbl> 0.00000000, 0.00000000, 0.02631579, 0.06451613, 0.00000000, 0.00000000, 0.00000000, 0.00000000, 0.00000000, 0.000000…
+$ surpresa     <dbl> 0.00000000, 0.00000000, 0.05263158, 0.03225806, 0.00000000, 0.00000000, 0.10000000, 0.00000000, 0.09523810, 0.000000…
+$ nojo         <dbl> 0.00000000, 0.00000000, 0.00000000, 0.03225806, 0.00000000, 0.00000000, 0.00000000, 0.00000000, 0.00000000, 0.000000…
+> 
+> # CONTRATADOS
+> # Filtrando a base para amostra de candidatos contratados
+> candidatos_linkedin_unnested_sent_transpose_graph <- candidatos_linkedin_unnested_sent_transpose %>% 
++   filter(condicao == "contratado") %>%
++   slice_head(n = 3)
+> # Removendo coluna para possibilitar a plotagem do gráfico radar
+> candidatos_linkedin_unnested_sent_transpose_graph$condicao <- NULL
+> # Alterando nome da coluna id_candidato
+> candidatos_linkedin_unnested_sent_transpose_graph <- candidatos_linkedin_unnested_sent_transpose_graph %>%
++   dplyr::rename(candidato = id_candidato)
+> # Reordenando as colunas para padronizar a visualização do gráfico
+> candidatos_linkedin_unnested_sent_transpose_graph <- 
++   candidatos_linkedin_unnested_sent_transpose_graph[,
++                                                     c("candidato",
++                                                       "antecipação",
++                                                       "confiança",
++                                                       "negativo",
++                                                       "positivo",
++                                                       "tristeza",
++                                                       "alegria",
++                                                       "medo",
++                                                       "raiva",
++                                                       "surpresa",
++                                                       "nojo")]
+> # Plotar gráfico
+> library(ggradar)
+> ggradar(candidatos_linkedin_unnested_sent_transpose_graph,
++         plot.title = "Candidatos Contratados - Amostra - Análise nrc_PTBR",
++         base.size = 20, 
++         values.radar = c(0, 0.5, 1),
++         grid.label.size = 4,
++         legend.text.size = 15,
++         legend.position = "bottom",
++         group.line.width = 0.75,
++         group.point.size = 2,
++         group.colours = c("coral", "cyan", "gray25"),
++         fill = TRUE,
++         fill.alpha = 0.25,
++         )
+> 
+> # RECUSADOS
+> # Filtrando a base para amostra de candidatos recusados
+> candidatos_linkedin_unnested_sent_transpose_graph <- candidatos_linkedin_unnested_sent_transpose %>% 
++   filter(condicao == "recusado") %>%
++   slice_head(n = 3)
+> # Removendo coluna para possibilitar a plotagem do gráfico radar
+> candidatos_linkedin_unnested_sent_transpose_graph$condicao <- NULL
+> # Alterando nome da coluna id_candidato
+> candidatos_linkedin_unnested_sent_transpose_graph <- candidatos_linkedin_unnested_sent_transpose_graph %>%
++   dplyr::rename(candidato = id_candidato)
+> # Reordenando as colunas para padronizar a visualização do gráfico
+> candidatos_linkedin_unnested_sent_transpose_graph <- 
++   candidatos_linkedin_unnested_sent_transpose_graph[,
++                                                     c("candidato",
++                                                       "antecipação",
++                                                       "confiança",
++                                                       "negativo",
++                                                       "positivo",
++                                                       "tristeza",
++                                                       "alegria",
++                                                       "medo",
++                                                       "raiva",
++                                                       "surpresa",
++                                                       "nojo")]
+> # Plotar gráfico
+> ggradar(candidatos_linkedin_unnested_sent_transpose_graph,
++         plot.title = "Candidatos Recusados - Amostra - Análise nrc_PTBR",
++         base.size = 20, 
++         values.radar = c(0, 0.5, 1),
++         grid.label.size = 4,
++         legend.text.size = 15,
++         legend.position = "bottom",
++         group.line.width = 0.75,
++         group.point.size = 2,
++         group.colours = c("coral", "cyan", "gray25"),
++         fill = TRUE,
++         fill.alpha = 0.25
++         )
+> 
+> # Analise geral de "contratados" e "recusados"
+> # Gera o resumo por sentimento
+> candidatos_linkedin_unnested_sent_geral <- candidatos_linkedin_unnested_nrc %>%
++   inner_join(nrc_lex_PTBR_df, join_by(term == word_ptbr)) %>%
++   count(condicao,
++         sentiment_ptbr)
+Warning message:
+In inner_join(., nrc_lex_PTBR_df, join_by(term == word_ptbr)) :
+  Each row in `x` is expected to match at most 1 row in `y`.
+ℹ Row 9 of `x` matches multiple rows.
+ℹ If multiple matches are expected, set `multiple = "all"` to silence this warning.
+> dplyr::glimpse(candidatos_linkedin_unnested_sent_geral)
+Rows: 20
+Columns: 3
+$ condicao       <chr> "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "c…
+$ sentiment_ptbr <chr> "alegria", "antecipação", "confiança", "medo", "negativo", "nojo", "positivo", "raiva", "surpresa", "tristeza", "a…
+$ n              <int> 73, 134, 224, 58, 131, 47, 508, 32, 43, 43, 56, 95, 178, 43, 88, 33, 351, 31, 37, 31
+> # Gera o total de palavras avaliadas com ncr_ptbr
+> candidatos_linkedin_unnested_sent_count_words_geral <- candidatos_linkedin_unnested_nrc %>%
++   inner_join(nrc_lex_PTBR_df, join_by(term == word_ptbr)) %>%
++   count(condicao) %>% 
++   dplyr::rename(words_total = n)
+Warning message:
+In inner_join(., nrc_lex_PTBR_df, join_by(term == word_ptbr)) :
+  Each row in `x` is expected to match at most 1 row in `y`.
+ℹ Row 9 of `x` matches multiple rows.
+ℹ If multiple matches are expected, set `multiple = "all"` to silence this warning.
+> dplyr::glimpse(candidatos_linkedin_unnested_sent_count_words_geral)
+Rows: 2
+Columns: 2
+$ condicao    <chr> "contratado", "recusado"
+$ words_total <int> 1293, 943
+> # Adiciona coluna com o número total de palavras "words_total"
+> candidatos_linkedin_unnested_sent_geral <- candidatos_linkedin_unnested_sent_geral %>%
++   left_join(candidatos_linkedin_unnested_sent_count_words_geral)
+Joining with `by = join_by(condicao)`
+> dplyr::glimpse(candidatos_linkedin_unnested_sent_geral)
+Rows: 20
+Columns: 4
+$ condicao       <chr> "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "c…
+$ sentiment_ptbr <chr> "alegria", "antecipação", "confiança", "medo", "negativo", "nojo", "positivo", "raiva", "surpresa", "tristeza", "a…
+$ n              <int> 73, 134, 224, 58, 131, 47, 508, 32, 43, 43, 56, 95, 178, 43, 88, 33, 351, 31, 37, 31
+$ words_total    <int> 1293, 1293, 1293, 1293, 1293, 1293, 1293, 1293, 1293, 1293, 943, 943, 943, 943, 943, 943, 943, 943, 943, 943
+> # Calcula o fator
+> candidatos_linkedin_unnested_sent_geral <- candidatos_linkedin_unnested_sent_geral %>%
++   mutate(fator = n/words_total)
+> dplyr::glimpse(candidatos_linkedin_unnested_sent_geral)
+Rows: 20
+Columns: 5
+$ condicao       <chr> "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "contratado", "c…
+$ sentiment_ptbr <chr> "alegria", "antecipação", "confiança", "medo", "negativo", "nojo", "positivo", "raiva", "surpresa", "tristeza", "a…
+$ n              <int> 73, 134, 224, 58, 131, 47, 508, 32, 43, 43, 56, 95, 178, 43, 88, 33, 351, 31, 37, 31
+$ words_total    <int> 1293, 1293, 1293, 1293, 1293, 1293, 1293, 1293, 1293, 1293, 943, 943, 943, 943, 943, 943, 943, 943, 943, 943
+$ fator          <dbl> 0.05645785, 0.10363496, 0.17324053, 0.04485692, 0.10131477, 0.03634957, 0.39288476, 0.02474865, 0.03325599, 0.0332…
+> # Gerar arquivo CSV para ser transposta no excel
+> write.table(candidatos_linkedin_unnested_sent_geral, 
++             file = "candidatos_linkedin_unnested_sent_geral.csv", 
++             quote = TRUE, 
++             sep = ";", 
++             eol = "\r\n",
++             na = "", 
++             row.names = FALSE,
++             fileEncoding = "UTF-8")
+> # Lendo a base do candidatos_linkedin_unnested_sent transposto
+> candidatos_linkedin_unnested_sent_geral_transpose <- read_excel("candidatos_linkedin_unnested_sent_geral.xlsx",
++                                                           sheet = "transpose",
++                                                           col_types = c("text", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric"))
+> # Reordenando as colunas para padronizar a visualização do gráfico
+> candidatos_linkedin_unnested_sent_geral_transpose <- 
++   candidatos_linkedin_unnested_sent_geral_transpose[,
++                                                     c("condicao",
++                                                       "antecipação",
++                                                       "confiança",
++                                                       "negativo",
++                                                       "positivo",
++                                                       "tristeza",
++                                                       "alegria",
++                                                       "medo",
++                                                       "raiva",
++                                                       "surpresa",
++                                                       "nojo")]
+> dplyr::glimpse(candidatos_linkedin_unnested_sent_geral_transpose)
+Rows: 2
+Columns: 11
+$ condicao    <chr> "contratado", "recusado"
+$ antecipação <dbl> 0.10703174, 0.09677419
+$ confiança   <dbl> 0.2109521, 0.2458588
+$ negativo    <dbl> 0.06720597, 0.05492589
+$ positivo    <dbl> 0.4156814, 0.4123801
+$ tristeza    <dbl> 0.02551338, 0.02528335
+$ alegria     <dbl> 0.06969508, 0.06538797
+$ medo        <dbl> 0.03235843, 0.02877071
+$ raiva       <dbl> 0.01493466, 0.02005231
+$ surpresa    <dbl> 0.04418171, 0.03748910
+$ nojo        <dbl> 0.01244555, 0.01307759
+> # Plotar gráfico
+> ggradar(candidatos_linkedin_unnested_sent_geral_transpose,
++         plot.title = "Dados Gerais de Candidatos - Análise nrc_PTBR",
++         base.size = 20, 
++         values.radar = c(0, 0.25, 0.5),
++         grid.min = 0,
++         grid.mid = 0.25,
++         grid.max = 0.5,
++         grid.label.size = 4,
++         legend.text.size = 15,
++         legend.position = "bottom",
++         group.line.width = 0.75,
++         group.point.size = 2,
++         group.colours = c("coral", "cyan"),
++         fill = TRUE,
++         fill.alpha = 0.25,
++         )
+> 
+> # Análise de sentimento com nrc para o Deck de Cultura
+> # Usaremos o 'corpus_deck' já preparado
+> # Gera o resumo de candidato por sentimento
+> corpus_deck_sent <- corpus_deck %>%
++   inner_join(nrc_lex_PTBR_df, join_by(word == word_ptbr)) %>%
++   count(sentiment_ptbr)
+Warning message:
+In inner_join(., nrc_lex_PTBR_df, join_by(word == word_ptbr)) :
+  Each row in `x` is expected to match at most 1 row in `y`.
+ℹ Row 12 of `x` matches multiple rows.
+ℹ If multiple matches are expected, set `multiple = "all"` to silence this warning.
+> dplyr::glimpse(corpus_deck_sent)
+Rows: 10
+Columns: 2
+$ sentiment_ptbr <chr> "alegria", "antecipação", "confiança", "medo", "negativo", "nojo", "positivo", "raiva", "surpresa", "tristeza"
+$ n              <int> 52, 66, 131, 27, 68, 26, 261, 25, 31, 19
+> # Gera o total de palavras avaliadas com ncr_ptbr
+> corpus_deck_sent_count_words <- sum(corpus_deck_sent$n) 
+> # Calcula o fator
+> corpus_deck_sent <- corpus_deck_sent %>%
++   mutate(fator = n/corpus_deck_sent_count_words)
+> dplyr::glimpse(corpus_deck_sent)
+Rows: 10
+Columns: 3
+$ sentiment_ptbr <chr> "alegria", "antecipação", "confiança", "medo", "negativo", "nojo", "positivo", "raiva", "surpresa", "tristeza"
+$ n              <int> 52, 66, 131, 27, 68, 26, 261, 25, 31, 19
+$ fator          <dbl> 0.07365439, 0.09348442, 0.18555241, 0.03824363, 0.09631728, 0.03682720, 0.36968839, 0.03541076, 0.04390935, 0.0269…
+> # Deve ser igual a'1'
+> sum(corpus_deck_sent$fator)
+[1] 1
+> # Ajustando o df para gráfico radar
+> corpus_deck_sent$n <- NULL
+> # Função para transpor um df tipo "tibble"
+> # https://stackoverflow.com/questions/28917076/transposing-data-frames/28917212#28917212
+> tibble_df_transpose <- function(tibble_df) {
++   
++   tibble_df %>% 
++     tidyr::pivot_longer(-1) %>%
++     tidyr::pivot_wider(names_from = 1, values_from = value)
++   
++ }
+> # Aplicando a função
+> corpus_deck_sent_t <- tibble_df_transpose(corpus_deck_sent)
+> # Excluindo colua não necessária para o gráfico
+> #corpus_deck_sent_t$name <- NULL
+> # Reordenando as colunas para padronizar a visualização do gráfico
+> corpus_deck_sent_t <- corpus_deck_sent_t[,
++                                          c("name",
++                                            "antecipação",
++                                            "confiança",
++                                            "negativo",
++                                            "positivo",
++                                            "tristeza",
++                                            "alegria",
++                                            "medo",
++                                            "raiva",
++                                            "surpresa",
++                                            "nojo")]
+> # Plotar gráfico
+> ggradar(corpus_deck_sent_t,
++         plot.title = "Deck de Cultura - Análise nrc_PTBR",
++         base.size = 20, 
++         values.radar = c(0, 0.25, 0.5),
++         grid.min = 0,
++         grid.mid = 0.25,
++         grid.max = 0.5,
++         grid.label.size = 4,
++         plot.legend = FALSE,
++         group.line.width = 0.75,
++         group.point.size = 2,
++         group.colours = c("coral"),
++         fill = TRUE,
++         fill.alpha = 0.25,
++         )
+> 
+> ### --->>> Análise usando o lexicon NRC traduzido para o PTBR --->>> END
+> 
+> ### --->>> Análise a sessão "Sobre" para o grupo de candidatos contratados e recusados --->>> Start
+> # Conta número de palavras da sessão "Sobre"
+> candidatos_unnested_count <- candidatos_linkedin %>%
++   unnest_tokens(term, sobre) %>% 
++   dplyr::count(id_candidato,condicao)
+> candidatos_unnested_count <- candidatos_unnested_count %>%
++   dplyr::rename(Condição = condicao)
+> dplyr::glimpse(candidatos_unnested_count, 5)
+Rows: 246
+Columns: 3
+$ id_candidato <dbl> …
+$ Condição     <chr> …
+$ n            <int> …
+> 
+> # Média de contagem de palavras para o grupo de candidatos contratados e recusados
+> candidatos_unnested_m <- candidatos_unnested_count %>%
++   group_by(Condição) %>%
++   dplyr::summarize(n = mean(n, na.rm=TRUE))
+> dplyr::glimpse(candidatos_unnested_m)
+Rows: 2
+Columns: 2
+$ Condição <chr> "contratado", "recusado"
+$ n        <dbl> 92.64286, 80.73585
+> # Quantidade de candidatos contratados e recusados
+> candidatos_condicao <- candidatos_unnested_count %>%
++   mutate(count = 1) %>% 
++   dplyr::count(Condição,count)
+> candidatos_condicao$count <- NULL
+> dplyr::glimpse(candidatos_condicao)
+Rows: 2
+Columns: 2
+$ Condição <chr> "contratado", "recusado"
+$ n        <int> 140, 106
+> 
+> # Plota o histograma
+> ggplot(candidatos_unnested_count, aes(x=n, color=Condição, fill=Condição)) + 
++   geom_histogram(aes(y=..density..), 
++                  alpha=0.5, 
++                  position="identity",
++                  bins = 15) +
++   geom_density(alpha=0.2)+
++   facet_grid(Condição ~ .) +
++   theme(legend.title = element_text(face = "bold"), legend.position="none") + 
++   labs(x = "número de palavras (-stowords) na sessão 'Sobre'",
++        y = "Contagem") + 
++   scale_color_manual(values=c("coral", "cyan")) +
++   scale_fill_manual(values=c("coral", "cyan"))
+> ### --->>> Análise a sessão "Sobre" para o grupo de candidatos contratados e recusados --->>> END
+> 

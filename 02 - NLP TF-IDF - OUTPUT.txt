@@ -1,0 +1,215 @@
+> # Preparando variáveis
+> deck_index = 1
+> candidato_index = 2
+> 
+> # Aproveitando o tratamento do Deck de Cultura executado no módulo específico
+> deck <- deck_cultura_df %>% 
++   # Adiciona coluna text_id com o valor fixo 'deck_index'
++   mutate(text_id = deck_index, "text") %>% 
++   # Altera a ordem das colunas
++   select(text_id, text)
+> 
+> 
+> # Tratamento do texto do candidato exemplo
+> # Coletar dados do arquivo
+> candidato_exemplo <- tibble::tibble(text = readLines("candidato exemplo.txt", 
++                                              encoding = 'UTF-8',
++                                              warn=FALSE))  %>% 
++   # Adicionar coluna text_id com o valor fixo 'candidato_index'
++   mutate(text_id = candidato_index, "text") %>% 
++   # Alterar a ordem das colunas
++   select(text_id, text)
+> 
+> # Ajustar o texto do candidato exemplo
+> candidato_exemplo$text <- candidato_exemplo$text %>%
++   # Aplicar função tolower a todas as linhas no tibble
++   lapply(tolower) %>%
++   # Remover caracter especial
++   lapply(gsub, pattern = '[^[:alnum:]]', replace = ' ') %>%
++   # Remover "não palavras"
++   lapply(gsub, pattern = '\\W', replace = ' ') %>%
++   # Remover dígitos
++   lapply(gsub, pattern = '\\d', replace = '') %>%
++   # Remover stopwords
++   lapply(tm::removeWords, stopwords_full_join$word) %>%
++   # Caso necessite remover acentuação do português
++   #lapply(iconv, from = 'UTF-8', to = 'ASCII//TRANSLIT') %>%
++   lapply(tm::stripWhitespace) %>%
++   # Multiplos espaços em branco são convertidos em um único espaço
++   trimws()
+> 
+> # Agrupando
+> deck_candidato_exemplo <- bind_rows(deck, candidato_exemplo)
+> 
+> #Unnest tokes para análise
+> book_words <- deck_candidato_exemplo %>%
++   unnest_tokens(word,
++                 text,
++                 token = "words") %>%
++   dplyr::count(text_id, word, sort = TRUE)
+> 
+> # TF-IDF candidato exemplo vs deck
+> # O dados do deck e candidato já estão pré-processados
+> books_tf_idf <- book_words %>% tidytext::bind_tf_idf(word, text_id, n)
+> 
+> # Separar para ver palavras mais importantes por texto
+> deck_tf_idf <- books_tf_idf %>% filter(text_id == deck_index)
+> candidato_tf_idf <- books_tf_idf %>% filter(text_id == candidato_index)
+> 
+> # Plotar gráfico com palavras mais importantes
+> books_graph <- books_tf_idf %>% 
++   group_by(text_id) %>% 
++   slice_max(tf_idf, n = 15) %>% 
++   ungroup() %>%
++   mutate(word = reorder(word, tf_idf)) 
+> # Ajuste de variáveis
+> books_graph <- mutate(books_graph, 
++                       text_id = replace(text_id, text_id==deck_index, "deck"))
+> books_graph <- mutate(books_graph,
++                       text_id = replace(text_id, text_id==candidato_index, "candidato"))
+> # Plotar 
+> books_graph %>% ggplot(aes(tf_idf, word, fill = text_id)) +
++   geom_col(show.legend = FALSE) +
++   labs(x = "TF-IDF", y = NULL) +
++   facet_wrap(~text_id, ncol = 2, scales = "free")
+> 
+> # Avaliar Lei de ZIPF: 
+> # A frequência com que uma palavra aparece é inversamente proporcional a sua classificação
+> deck_candidato_exemplo_zipf <- deck_candidato_exemplo %>%
++   unnest_tokens(word,
++                 text,
++                 token = "words") %>%
++   dplyr::count(text_id, word, sort = TRUE) %>%
++   ungroup()
+> # Calcular o total no texto do candidato e do deck
+> deck_candidato_exemplo_zipf_total <- deck_candidato_exemplo_zipf %>%
++   dplyr::count(text_id) %>%
++   dplyr::rename("total" = "n")
+> dplyr::glimpse(deck_candidato_exemplo_zipf_total)
+Rows: 2
+Columns: 2
+$ text_id <dbl> 1, 2
+$ total   <int> 769, 187
+> # Fazer merge da base com o total
+> deck_candidato_exemplo_zipf <- dplyr::left_join(deck_candidato_exemplo_zipf,
++                                                 deck_candidato_exemplo_zipf_total)
+Joining with `by = join_by(text_id)`
+> # Ajustar valores das variáveis
+> books_graph <- deck_candidato_exemplo_zipf %>%
++   dplyr::mutate(text_id = replace(text_id, text_id==deck_index, "deck")) %>%
++   dplyr::mutate(text_id = replace(text_id, text_id==candidato_index, "candidato"))
+> dplyr::glimpse(books_graph)
+Rows: 956
+Columns: 4
+$ text_id <chr> "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "candidat…
+$ word    <chr> "pessoas", "clientes", "cultura", "empresa", "forma", "sempre", "valor", "valorizamos", "mundo", "alta", "através", "faze…
+$ n       <int> 19, 18, 17, 17, 10, 10, 10, 10, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7, 7, 7, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5, 5,…
+$ total   <int> 769, 769, 769, 769, 769, 769, 769, 769, 769, 769, 769, 769, 769, 769, 187, 769, 769, 769, 769, 769, 769, 769, 769, 769, 7…
+> # Plotar o gráfico
+> books_graph %>% 
++   ggplot(aes(n/total, fill = text_id)) +
++   geom_histogram(show.legend = FALSE) +
++   xlim(NA, 0.05) +
++   labs(x = "frequência/total", 
++        y = "contagem de termos") +
++   #facet_wrap(~text_id, ncol = 2, scales = "free_y")
++   facet_wrap(~text_id, ncol = 2)
+`stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+Warning message:
+Removed 2 rows containing missing values (`geom_bar()`). 
+> 
+> # Zipf’s Law
+> # Cálculo da frequência
+> books_freq_by_rank <- books_graph %>%
++   dplyr::group_by(text_id) %>%
++   dplyr::mutate(rank = row_number(),
++          frequencia = n/total)
+> dplyr::glimpse(books_freq_by_rank)
+Rows: 956
+Columns: 6
+Groups: text_id [2]
+$ text_id    <chr> "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "deck", "candi…
+$ word       <chr> "pessoas", "clientes", "cultura", "empresa", "forma", "sempre", "valor", "valorizamos", "mundo", "alta", "através", "f…
+$ n          <int> 19, 18, 17, 17, 10, 10, 10, 10, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7, 7, 7, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5,…
+$ total      <int> 769, 769, 769, 769, 769, 769, 769, 769, 769, 769, 769, 769, 769, 769, 187, 769, 769, 769, 769, 769, 769, 769, 769, 769…
+$ rank       <int> 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 1, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, …
+$ frequencia <dbl> 0.024707412, 0.023407022, 0.022106632, 0.022106632, 0.013003901, 0.013003901, 0.013003901, 0.013003901, 0.011703511, 0…
+> # Gráfico
+> books_freq_by_rank %>%
++   ggplot(aes(x = rank, 
++              y = frequencia, 
++              color = text_id)) +
++   labs(x = "classificação", 
++        y = "frequência dos termos", 
++        color= "Texto") +
++   theme(legend.title = element_text(face = "bold")) + 
++   geom_line(size = 1, 
++             alpha = 1) +
++   scale_x_log10() +
++   scale_y_log10()
+> 
+> # Teste da lei de Zipf
+> # A lei de Zipf clássica têm classificação de frequência de ~ (1/rank)
+> books_freq_by_rank_subset_candidato <- books_freq_by_rank %>%
++   filter(text_id == "candidato")
+> lm(log10(frequencia) ~ log10(rank), data = books_freq_by_rank_subset_candidato)
+
+Call:
+lm(formula = log10(frequencia) ~ log10(rank), data = books_freq_by_rank_subset_candidato)
+
+Coefficients:
+(Intercept)  log10(rank)  
+     -1.602       -0.330  
+
+> # Coefficients:
+> # (Intercept)  log10(rank)  
+> #     -1.602       -0.330 
+> books_freq_by_rank_subset_deck <- books_freq_by_rank %>%
++   filter(text_id == "deck")
+> lm(log10(frequencia) ~ log10(rank), data = books_freq_by_rank_subset_deck)
+
+Call:
+lm(formula = log10(frequencia) ~ log10(rank), data = books_freq_by_rank_subset_deck)
+
+Coefficients:
+(Intercept)  log10(rank)  
+    -1.4510      -0.5324  
+
+> # Coefficients:
+> # (Intercept)  log10(rank)  
+> #     -1.4510      -0.5324  
+> # Plotar o gráfico
+> books_freq_by_rank_graph <- books_freq_by_rank %>%
++   ggplot(aes(x = rank, 
++              y = frequencia, 
++              colour=text_id)) +
++   geom_line(size = 1.5, 
++             alpha = 1) + 
++   labs(x = "classificação", 
++        y = "frequência dos termos", 
++        colour = "Texto", 
++        title = "Lei de Zipf") + 
++   theme(legend.title = element_text(face = "bold")) + 
++   scale_x_log10() + 
++   scale_y_log10() + 
++   geom_smooth(data = books_freq_by_rank_subset_candidato,
++               method = "lm", 
++               formula = y ~ x, 
++               se = FALSE, 
++               aes(x = rank, 
++                   y = frequencia, 
++                   colour = paste("Zipf regressão","\n","para o candidato")),
++               size = 1, 
++               linetype = 2) +  
++   geom_smooth(data = books_freq_by_rank_subset_deck,
++               method = "lm", 
++               formula = y ~ x, 
++               se = FALSE, 
++               aes(x = rank, 
++                   y = frequencia, 
++                   colour = paste("Zipf regressão","\n","para o deck")),
++               size = 1, 
++               linetype = 2) + 
++   scale_color_manual(values = c("coral","cyan","coral","cyan"))
+> plot(books_freq_by_rank_graph)
+> 

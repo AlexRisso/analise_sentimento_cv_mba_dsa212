@@ -1,18 +1,3 @@
-# Instalação e Carregamento dos Pacotes
-
-pacotes <- c("tm", "dplyr", "wordcloud", "stringr", "tidyverse", "tidytext", 
-             "tibble", "utils", "widyr", "janeaustenr")
-
-if(sum(as.numeric(!pacotes %in% installed.packages())) != 0){
-  instalador <- pacotes[!pacotes %in% installed.packages()]
-  for(i in 1:length(instalador)) {
-    install.packages(instalador, dependencies = T)
-    break()}
-  sapply(pacotes, require, character = T) 
-} else {
-  sapply(pacotes, require, character = T) 
-}
-
 ### --->>> Tratamento do Deck De Cultura NTConsult --->>> START
 
 # Gerar lista de stopwords
@@ -21,7 +6,8 @@ stopwords_py <- read.csv("stopwords_pt_py.csv",
                          encoding = 'UTF-8', 
                          header = TRUE)
 # Stopwords proveniente do R
-stopwords_R <- tibble::tibble(word = stopwords('pt'))
+stopwords_R <- tibble::tibble(word = tm::stopwords('pt'))
+dplyr::glimpse(stopwords_R)
 # Criar arquivo CSV para o stopwords do R
 write.csv(stopwords_R, "stopwords_pt_r.csv", row.names=FALSE)
 # Stopwords proveniente de alopes (github), no link:
@@ -29,6 +15,8 @@ write.csv(stopwords_R, "stopwords_pt_r.csv", row.names=FALSE)
 stopwords_alopes <- read.csv("stopwords_pt_alopes.csv",
                              encoding = 'UTF-8',
                              header = TRUE)
+dplyr::glimpse(stopwords_alopes)
+
 # Unir as listas de stopwords
 stopwords_full_join <- dplyr::full_join(stopwords_py,
                                         stopwords_R,
@@ -39,10 +27,13 @@ stopwords_full_join <- dplyr::full_join(stopwords_full_join,
                                         by = "word",
                                         keep = FALSE,
                                         multiple = "all")
+dplyr::glimpse(stopwords_full_join)
 
 # Ler o deck de cultura
 deck_cultura_df <- tibble::tibble(text = readLines("deck de cultura.txt", 
-                                                   encoding = 'UTF-8'))
+                                                   encoding = 'UTF-8',
+                                                   warn=FALSE))
+dplyr::glimpse(deck_cultura_df)
 
 # Tratamento do Deck de Cultura
 deck_cultura_df$text <- deck_cultura_df$text %>%
@@ -67,10 +58,12 @@ corpus_deck <- deck_cultura_df %>%
                tidytext::unnest_tokens(word,
                                        text,
                                        token = "words")
+dplyr::glimpse(corpus_deck)
 # Contar aparições de palavras usando uma função dplyr
 word_count <- corpus_deck %>% 
               dplyr::count(word,
                            sort = TRUE)
+dplyr::glimpse(word_count)
 
 # Criar uma nuvem de palavras usando uma função wordcloud
 # Define a paleta de cores
@@ -141,14 +134,6 @@ utils::str(as_dictionary)
 
 ### --->>> Análise de correlação phi no Deck --->>> START
 
-# Bibliotecas
-library("dplyr")
-library("tidytext")
-library("wordcloud")
-library("stringr")
-library("SnowballC")
-#install.packages("stopwords")
-
 # Mudar o encoding para ver acentos
 deck_cultura_df_kgrams <- deck_cultura_df
 Encoding(deck_cultura_df_kgrams$text) <- "ASCII"
@@ -161,26 +146,28 @@ for (i in 1:nrow(deck_cultura_df_kgrams))
 
 # Unnest tokens
 deck_cultura_df_kgrams <- deck_cultura_df_kgrams %>%  
-  mutate(line = row_number()) %>%
-  unnest_tokens(word, text) %>%
-  filter(!word %in% stopwords_full_join$word)
+  dplyr::mutate(line = row_number()) %>%
+  tidytext::unnest_tokens(word, text) %>%
+  dplyr::filter(!word %in% stopwords_full_join$word)
 
 # Correlação entre palavras - widyr
 word_pairs <- deck_cultura_df_kgrams %>%
-  pairwise_count(word, line, sort = TRUE)
+  widyr::pairwise_count(word, line, sort = TRUE)
+dplyr::glimpse(word_pairs)
 
 word_cors <- deck_cultura_df_kgrams %>%
-  group_by(word) %>%
-  filter(n() >= 5) %>%
-  pairwise_cor(word, line, sort = TRUE)
+  dplyr::group_by(word) %>%
+  dplyr::filter(n() >= 5) %>%
+  widyr::pairwise_cor(word, line, sort = TRUE)
+dplyr::glimpse(word_cors)
 
 # Gráfico
 word_cors %>%
-  filter(item1 %in% c("impacto", "positivo", "alta", "performance")) %>%
-  group_by(item1) %>%
-  top_n(8) %>%
-  ungroup() %>%
-  mutate(item2 = reorder(item2, correlation)) %>%
+  filter(item1 %in% c("impacto", "positivo", "alta", "performance")) %>% 
+  group_by(item1) %>% 
+  top_n(8) %>% 
+  ungroup() %>% 
+  mutate(item2 = reorder(item2, correlation)) %>% 
   ggplot(aes(item2, correlation)) +
   geom_bar(stat = "identity") +
   labs(x = "Termo do bigrama", y = "Correlação") +
