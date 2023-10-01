@@ -137,7 +137,7 @@ candidatos_linkedin_unnested_op30_senPT02$sobre <- NULL
 dplyr::glimpse(candidatos_linkedin_unnested_op30_senPT02)
 # Definindo dados do gráfico
 #Título Geral
-title_graph = "Frequencia de polaridades entre candidatos contratados e recusados"
+title_graph = "Frequência de polaridades entre candidatos contratados e recusados"
 # Plotar os gráficos
 # oplexicon_v3.0
 candidatos_linkedin_unnested_op30_senPT02_graph <- candidatos_linkedin_unnested_op30_senPT02 %>% 
